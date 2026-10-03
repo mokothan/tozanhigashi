@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登山部 共同装備分配ツール</title>
+<style>
+:root {
+  --primary: #2e7d32;
+  --primary-dark: #1b5e20;
+  --bg: #f0f2f5;
+  --text: #333;
+  --border: #ddd;
+  --card-bg: #fff;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 10px;
+}
+.container { max-width: 1200px; margin: auto; }
+h1 { color: var(--primary-dark); font-size: 1.5rem; text-align: center; margin: 10px 0 20px; }
+h2 { font-size: 1.2rem; border-bottom: 2px solid var(--primary); padding-bottom: 5px; margin-top: 0; margin-bottom: 15px; }
+h3 { font-size: 1rem; margin: 10px 0 5px; color: #444; }
+
+.card {
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.grid-2 { display: grid; grid-template-columns: 1fr; gap: 15px; }
+@media(min-width: 800px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
+.grid-3 { display: grid; grid-template-columns: 1fr; gap: 15px; }
+@media(min-width: 600px){ .grid-3 { grid-template-columns: 1fr 1fr; } }
+@media(min-width: 900px){ .grid-3 { grid-template-columns: 1fr 1fr 1fr; } }
+
+.actions { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+.btn { background: var(--primary); color: #fff; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 0.95rem; font-weight: bold; transition: background 0.2s; }
+.btn:hover { background: var(--primary-dark); }
+.btn-danger { background: #d32f2f; }
+.btn-danger:hover { background: #b71c1c; }
+.btn-sm { padding: 4px 8px; font-size: 0.8rem; font-weight: normal; }
+
+table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 0.85rem; }
+th, td { border: 1px solid var(--border); padding: 6px; text-align: left; vertical-align: middle; }
+th { background: #fafafa; }
+input, select { padding: 4px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.9rem; }
+input[type="number"], input[type="text"] { width: 100%; }
+.w-auto { width: auto; }
+
+.alert { background: #ffebee; color: #c62828; padding: 10px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #ef9a9a; font-weight: bold; }
+.stat-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; text-align: center; }
+.stat-item { background: #e8f5e9; padding: 10px; border-radius: 6px; border: 1px solid #c8e6c9; }
+.stat-item .val { font-size: 1.2rem; font-weight: bold; color: var(--primary-dark); }
+
+.group-box { border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 10px; background: #fafafa; }
+.group-box ul { margin: 5px 0; padding-left: 20px; font-size: 0.9rem; }
+.group-box li { margin-bottom: 4px; }
+.flex-row { display: flex; gap: 5px; align-items: center; margin-top: 5px; }
+
+.member-box { border: 2px dashed #bbb; padding: 10px; border-radius: 8px; background: #fff; min-height: 120px; transition: all 0.2s; }
+.member-box.dragover { background: #e8f5e9; border-color: var(--primary); }
+.member-info { display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 8px; }
+.member-stats { font-size: 0.8rem; color: #555; display: flex; justify-content: space-between; margin-bottom: 8px; }
+
+.item-card { 
+  background: #e0f2f1; border: 1px solid #b2dfdb; border-radius: 4px; 
+  padding: 4px 6px; margin: 2px; display: inline-flex; justify-content: space-between; gap: 5px;
+  font-size: 0.8rem; cursor: grab; user-select: none; color: #004d40;
+}
+.item-card:active { cursor: grabbing; opacity: 0.7; }
+.text-right { text-align: right; }
+.gender-m { color: #1565c0; }
+.gender-f { color: #c62828; }
+</style>
+</head>
+<body>
+<div id="app" class="container"></div>
+
+<script>
+// --- 初期データ定義 ---
+const DEFAULT_ITEMS = [
+  { id: "t1", name: "V6テント6人用", weight: 4.0, count: 6, category: "tent", capacity: 6 },
+  { id: "t2", name: "エスパース4人用", weight: 3.0, count: 2, category: "tent", capacity: 4 },
+  { id: "t3", name: "アライ4人用", weight: 3.0, count: 1, category: "tent", capacity: 4 },
+  { id: "t4", name: "ダンロップ3人用", weight: 2.0, count: 1, category: "tent", capacity: 3 },
+  { id: "p1", name: "ペグ", weight: 0.84, count: 9, category: "peg" },
+  { id: "h1", name: "ハンマー", weight: 0.50, count: 9, category: "hammer" },
+  { id: "m1", name: "銀マット", weight: 0.20, count: 18, category: "mat" },
+  { id: "c1", name: "コッフェル", weight: 0.50, count: 5, category: "cooker" },
+  { id: "g1", name: "ガスヘッド", weight: 0.10, count: 10, category: "gas" },
+  { id: "b1", name: "カートリッジ", weight: 0.37, count: 15, category: "cartridge" },
+  { id: "r1", name: "修理具", weight: 1.50, count: 1, category: "other" },
+  { id: "r2", name: "補助ロープ", weight: 1.00, count: 1, category: "other" },
+  { id: "r3", name: "ツェルト", weight: 0.50, count: 1, category: "other" }
+];
+
+const DEFAULT_MEMBERS = [
+  { id: 1, name: "山田 太郎", grade: 2, gender: "M", items: [] },
+  { id: 2, name: "鈴木 一郎", grade: 2, gender: "M", items: [] },
+  { id: 3, name: "佐藤 次郎", grade: 2, gender: "M", items: [] },
+  { id: 4, name: "高橋 三郎", grade: 2, gender: "M", items: [] },
+  { id: 5, name: "伊藤 花子", grade: 2, gender: "F", items: [] },
+  { id: 6, name: "渡辺 美咲", grade: 2, gender: "F", items: [] },
+  { id: 7, name: "小林 さくら", grade: 2, gender: "F", items: [] },
+  { id: 8, name: "加藤 愛", grade: 2, gender: "F", items: [] },
+  { id: 9, name: "田中 健太", grade: 1, gender: "M", items: [] },
+  { id: 10, name: "吉田 翔太", grade: 1, gender: "M", items: [] },
+  { id: 11, name: "山田 陸", grade: 1, gender: "M", items: [] },
+  { id: 12, name: "佐々木 蓮", grade: 1, gender: "M", items: [] },
+  { id: 13, name: "山口 空", grade: 1, gender: "M", items: [] },
+  { id: 14, name: "松本 海", grade: 1, gender: "M", items: [] },
+  { id: 15, name: "井上 結衣", grade: 1, gender: "F", items: [] },
+  { id: 16, name: "木村 葵", grade: 1, gender: "F", items: [] },
+  { id: 17, name: "林 凛", grade: 1, gender: "F", items: [] },
+  { id: 18, name: "斎藤 陽菜", grade: 1, gender: "F", items: [] },
+  { id: 19, name: "清水 結愛", grade: 1, gender: "F", items: [] },
+  { id: 20, name: "山崎 紬", grade: 1, gender: "F", items: [] }
+];
+
+const DEFAULT_STATE = {
+  items: JSON.parse(JSON.stringify(DEFAULT_ITEMS)),
+  members: JSON.parse(JSON.stringify(DEFAULT_MEMBERS)),
+  tentGroups: [],
+  mealGroups: [],
+  config: { nights: 2, mealGroupCount: 5, weightM: 1.0, weightF: 0.6, foodWeightPerMeal: 0.2 },
+  errors: []
+};
+
+let state = null;
+
+// --- ユーティリティ ---
+function loadState() {
+  const saved = localStorage.getItem('mtEquipApp');
+  if(saved) {
+    try { state = JSON.parse(saved); return; } catch(e){}
+  }
+  state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+}
+function saveState() { localStorage.setItem('mtEquipApp', JSON.stringify(state)); }
+
+const getRealWeight = (item) => {
+  if (item.refId === 'food') return item.weight;
+  let master = state.items.find(i => i.id === item.refId);
+  return master ? master.weight : item.weight;
+};
+
+const getMemWeightStats = (mem) => {
+  let rw = mem.items.reduce((sum, it) => sum + getRealWeight(it), 0);
+  let coeff = mem.gender === 'M' ? state.config.weightM : state.config.weightF;
+  let aw = rw / coeff;
+  return { real: rw, adjusted: aw, coeff };
+};
+
+// --- 自動編成＆分配ロジック ---
+function calcTentGroupSizes(N) {
+  if (N <= 0) return [];
+  if (N === 1) return [1];
+  if (N === 2) return [2];
+  if (N === 3) return [3];
+  if (N === 4) return [4];
+  let res = [];
+  let a = Math.floor(N / 4);
+  let rem = N % 4;
+  if (rem === 0) { for(let i=0; i<a; i++) res.push(4); } 
+  else if (rem === 3) { for(let i=0; i<a; i++) res.push(4); res.push(3); } 
+  else if (rem === 2) { for(let i=0; i<a; i++) res.push(4); res.push(2); } 
+  else if (rem === 1) { for(let i=0; i<a-1; i++) res.push(4); res.push(3); res.push(3); }
+  return res;
+}
+
+window.autoAssign = () => {
+  if(!confirm("現在の班編成と装備分配はリセットされます。よろしいですか？")) return;
+  state.errors = [];
+  
+  // 1. テント班編成 (男女分離、学年混在)
+  let men = state.members.filter(m => m.gender === 'M');
+  let women = state.members.filter(m => m.gender === 'F');
+  let sizesM = calcTentGroupSizes(men.length);
+  let sizesW = calcTentGroupSizes(women.length);
+  
+  const mixMembers = (mems) => {
+    let g2 = mems.filter(m=>m.grade===2);
+    let g1 = mems.filter(m=>m.grade===1);
+    let mixed = [];
+    while(g2.length || g1.length) {
+      if(g2.length) mixed.push(g2.shift());
+      if(g1.length) mixed.push(g1.shift());
+    }
+    return mixed;
+  };
+  
+  let mixedM = mixMembers(men);
+  let mixedW = mixMembers(women);
+  let tGroups = [];
+  let tId = 1;
+  
+  sizesM.forEach(s => tGroups.push({ id: tId++, gender: 'M', members: mixedM.splice(0, s).map(x=>x.id), tent: null }));
+  sizesW.forEach(s => tGroups.push({ id: tId++, gender: 'F', members: mixedW.splice(0, s).map(x=>x.id), tent: null }));
+  
+  let availTents = JSON.parse(JSON.stringify(state.items.filter(i => i.category === 'tent')));
+  tGroups.forEach(g => {
+    let s = g.members.length;
+    let t = null;
+    if(s >= 4) t = availTents.find(x => x.name.includes("V6") && x.count > 0);
+    else if(s === 3) t = availTents.find(x => (x.name.includes("エスパース") || x.name.includes("アライ")) && x.count > 0);
+    else if(s <= 2) t = availTents.find(x => x.name.includes("ダンロップ") && x.count > 0);
+    
+    if(!t) t = availTents.find(x => x.capacity >= s && x.count > 0);
+    if(!t) t = availTents.find(x => x.count > 0);
+    
+    if(t) {
+      t.count--;
+      g.tent = { refId: t.id, name: t.name, weight: t.weight };
+    } else {
+      state.errors.push(`テント班${g.id}のテントが不足`);
+    }
+  });
+  state.tentGroups = tGroups;
+  
+  // 2. 食事班編成 (5班)
+  let mGroups = [];
+  for(let i=1; i<=state.config.mealGroupCount; i++) mGroups.push({ id: i, members: [] });
+  
+  let pools = [
+    state.members.filter(m=>m.grade===2 && m.gender==='M'),
+    state.members.filter(m=>m.grade===2 && m.gender==='F'),
+    state.members.filter(m=>m.grade===1 && m.gender==='M'),
+    state.members.filter(m=>m.grade===1 && m.gender==='F')
+  ];
+  let mealIdx = 0;
+  pools.forEach(pool => {
+    pool.forEach(mem => {
+      mGroups[mealIdx].members.push(mem.id);
+      mealIdx = (mealIdx + 1) % mGroups.length;
+    });
+  });
+  state.mealGroups = mGroups;
+  
+  // 3. 装備分配
+  state.members.forEach(m => m.items = []);
+  
+  let tempMembers = state.members.map(m => ({
+    id: m.id, gender: m.gender, items: [],
+    coeff: m.gender === 'M' ? state.config.weightM : state.config.weightF,
+    get adjW() {
+      return this.items.reduce((s,it)=>{
+         let r = state.items.find(x=>x.id===it.refId);
+         return s + (r ? r.weight : it.weight);
+      }, 0) / this.coeff;
+    }
+  }));
+  
+  let uidCnt = 1;
+  const cInst = (refId, name, weight) => ({ uid: 'itm_'+(uidCnt++), refId, name, weight });
+  
+  const assignLightest = (ids, inst) => {
+    if(ids.length===0) return;
+    let targets = ids.map(id => tempMembers.find(t=>t.id===id));
+    targets.sort((a,b) => a.adjW - b.adjW);
+    targets[0].items.push(inst);
+  };
+  
+  let stocks = {};
+  state.items.forEach(i => stocks[i.id] = i.count);
+  
+  // テント班固定装備
+  let pegR = state.items.find(i=>i.category==='peg');
+  let hamR = state.items.find(i=>i.category==='hammer');
+  let matR = state.items.find(i=>i.category==='mat');
+  
+  state.tentGroups.forEach(g => {
+    if(g.tent) assignLightest(g.members, cInst(g.tent.refId, g.tent.name, g.tent.weight));
+    
+    if(pegR && stocks[pegR.id] >= 1) { stocks[pegR.id]--; assignLightest(g.members, cInst(pegR.id, pegR.name, pegR.weight)); }
+    else state.errors.push(`ペグ不足(班${g.id})`);
+    
+    if(hamR && stocks[hamR.id] >= 1) { stocks[hamR.id]--; assignLightest(g.members, cInst(hamR.id, hamR.name, hamR.weight)); }
+    else state.errors.push(`ハンマー不足(班${g.id})`);
+    
+    if(matR && stocks[matR.id] >= 2) { 
+      stocks[matR.id]-=2; 
+      assignLightest(g.members, cInst(matR.id, matR.name, matR.weight));
+      assignLightest(g.members, cInst(matR.id, matR.name, matR.weight));
+    } else state.errors.push(`銀マット不足(班${g.id})`);
+  });
+  
+  // 食事班固定装備
+  let cookR = state.items.find(i=>i.category==='cooker');
+  let gasR = state.items.find(i=>i.category==='gas');
+  let cartR = state.items.find(i=>i.category==='cartridge');
+  
+  state.mealGroups.forEach(g => {
+    if(g.members.length===0) return;
+    if(cookR && stocks[cookR.id] >= 1) { stocks[cookR.id]--; assignLightest(g.members, cInst(cookR.id, cookR.name, cookR.weight)); }
+    else state.errors.push(`コッフェル不足(食班${g.id})`);
+    
+    if(cartR && stocks[cartR.id] >= 3) { stocks[cartR.id]-=3; for(let i=0;i<3;i++) assignLightest(g.members, cInst(cartR.id, cartR.name, cartR.weight)); }
+    else state.errors.push(`カートリッジ不足(食班${g.id})`);
+    
+    if(gasR && stocks[gasR.id] >= 2) { stocks[gasR.id]-=2; for(let i=0;i<2;i++) assignLightest(g.members, cInst(gasR.id, gasR.name, gasR.weight)); }
+    else state.errors.push(`ガスヘッド不足(食班${g.id})`);
+  });
+  
+  // 食材と残り
+  let foodCnt = state.members.length * (state.config.nights * 2);
+  let remain = [];
+  for(let i=0; i<foodCnt; i++) remain.push(cInst('food', '食材', state.config.foodWeightPerMeal));
+  
+  Object.keys(stocks).forEach(id => {
+    let c = stocks[id];
+    let r = state.items.find(x=>x.id===id);
+    if(r.category === 'tent') return; 
+    for(let i=0; i<c; i++) remain.push(cInst(r.id, r.name, r.weight));
+  });
+  
+  remain.sort((a,b) => b.weight - a.weight);
+  let allIds = state.members.map(m=>m.id);
+  remain.forEach(it => assignLightest(allIds, it));
+  
+  // 反映
+  tempMembers.forEach(tm => {
+    let mem = state.members.find(m=>m.id===tm.id);
+    mem.items = tm.items;
+  });
+  
+  saveState();
+  render();
+};
+
+window.resetData = () => {
+  if(confirm("初期状態に戻しますか？")) {
+    state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    saveState(); render();
+  }
+};
+
+// --- イベントハンドラ ---
+window.updateConfig = (key, val) => { state.config[key] = parseFloat(val); saveState(); render(); };
+window.addMember = () => {
+  let n = document.getElementById('new_mem_n').value;
+  let gr = parseInt(document.getElementById('new_mem_gr').value);
+  let ge = document.getElementById('new_mem_ge').value;
+  if(n) {
+    let id = Math.max(0, ...state.members.map(m=>m.id)) + 1;
+    state.members.push({id, name:n, grade:gr, gender:ge, items:[]});
+    window.autoAssign();
+  }
+};
+window.delMember = (id) => { state.members = state.members.filter(m=>m.id!==id); window.autoAssign(); };
+window.updateMember = (id, key, val) => {
+  let m = state.members.find(x=>x.id===id);
+  if(key==='grade') m[key] = parseInt(val);
+  else m[key] = val;
+  if(key!=='name') window.autoAssign(); else { saveState(); render(); }
+};
+
+window.addItem = () => {
+  let n = document.getElementById('new_itm_n').value;
+  let w = parseFloat(document.getElementById('new_itm_w').value);
+  let c = parseInt(document.getElementById('new_itm_c').value);
+  if(n && !isNaN(w) && !isNaN(c)) {
+    state.items.push({ id: 'c_'+Date.now(), name:n, weight:w, count:c, category:'other' });
+    saveState(); render();
+  }
+};
+window.delItem = (id) => { state.items = state.items.filter(i=>i.id!==id); saveState(); render(); };
+window.updateItem = (id, key, val) => {
+  let i = state.items.find(x=>x.id===id);
+  if(key==='weight') i[key] = parseFloat(val);
+  else if(key==='count') i[key] = parseInt(val);
+  else i[key] = val;
+  saveState(); render();
+};
+
+window.addTentMem = (gid, sid) => {
+  let sel = document.getElementById(sid);
+  let mid = parseInt(sel.value);
+  if(mid) { state.tentGroups.find(g=>g.id===gid).members.push(mid); saveState(); render(); }
+};
+window.delTentMem = (gid, mid) => {
+  let g = state.tentGroups.find(x=>x.id===gid);
+  g.members = g.members.filter(id=>id!==mid); saveState(); render();
+};
+window.addMealMem = (gid, sid) => {
+  let sel = document.getElementById(sid);
+  let mid = parseInt(sel.value);
+  if(mid) { state.mealGroups.find(g=>g.id===gid).members.push(mid); saveState(); render(); }
+};
+window.delMealMem = (gid, mid) => {
+  let g = state.mealGroups.find(x=>x.id===gid);
+  g.members = g.members.filter(id=>id!==mid); saveState(); render();
+};
+
+// --- D&D ロジック ---
+window.dragStart = (e, mId, uId) => { e.dataTransfer.setData('text/plain', ''); window._drag = {mId, uId}; };
+window.dragOver = (e) => { e.preventDefault(); e.currentTarget.classList.add('dragover'); };
+window.dragLeave = (e) => { e.currentTarget.classList.remove('dragover'); };
+window.drop = (e, tId) => {
+  e.preventDefault(); e.currentTarget.classList.remove('dragover');
+  if(window._drag) handleItemMove(window._drag.mId, tId, window._drag.uId);
+};
+window.touchStart = (e, mId, uId) => { window._drag = {mId, uId}; e.currentTarget.style.opacity = '0.5'; };
+window.touchMove = (e) => { e.preventDefault(); };
+window.touchEnd = (e) => {
+  e.currentTarget.style.opacity = '1';
+  let t = e.changedTouches[0];
+  let el = document.elementFromPoint(t.clientX, t.clientY);
+  if(el) {
+    let dz = el.closest('.member-box');
+    if(dz) {
+      let tId = parseInt(dz.getAttribute('data-id'));
+      if(tId) handleItemMove(window._drag.mId, tId, window._drag.uId);
+    }
+  }
+};
+function handleItemMove(fId, tId, uId) {
+  if(fId === tId) return;
+  let fm = state.members.find(m=>m.id===fId);
+  let tm = state.members.find(m=>m.id===tId);
+  let idx = fm.items.findIndex(i=>i.uid===uId);
+  if(idx !== -1) {
+    tm.items.push(fm.items.splice(idx,1)[0]);
+    saveState(); render();
+  }
+}
+
+// --- 描画 ---
+function render() {
+  let tW=0, rwArr=[], awArr=[];
+  state.members.forEach(m => {
+    let st = getMemStats(m);
+    tW += st.rw; rwArr.push(st.rw); awArr.push(st.aw);
+  });
+  let maxR = rwArr.length ? Math.max(...rwArr) : 0;
+  let minR = rwArr.length ? Math.min(...rwArr) : 0;
+  let maxA = awArr.length ? Math.max(...awArr) : 0;
+  let minA = awArr.length ? Math.min(...awArr) : 0;
+  let avgA = awArr.length ? (awArr.reduce((a,b)=>a+b,0)/awArr.length) : 0;
+
+  let html = `
+    <h1>⛰️ 登山部 共同装備分配ツール</h1>
+    <div class="actions">
+      <button onclick="autoAssign()" class="btn">自動編成＆自動分配を実行</button>
+      <button onclick="resetData()" class="btn btn-danger">初期状態に戻す</button>
+    </div>
+    
+    ${state.errors.length ? `<div class="alert">${state.errors.join('<br>')}</div>` : ''}
+    
+    <div class="card stat-box">
+      <div class="stat-item"><div>部員数</div><div class="val">${state.members.length}人</div><div style="font-size:0.8rem">男${state.members.filter(m=>m.gender==='M').length} 女${state.members.filter(m=>m.gender==='F').length}</div></div>
+      <div class="stat-item"><div>総重量</div><div class="val">${tW.toFixed(1)}kg</div></div>
+      <div class="stat-item"><div>補正後平均</div><div class="val">${avgA.toFixed(1)}kg</div></div>
+      <div class="stat-item"><div>最大 / 最小(実)</div><div class="val">${maxR.toFixed(1)} / ${minR.toFixed(1)}</div></div>
+      <div class="stat-item"><div>最大 / 最小(補)</div><div class="val">${maxA.toFixed(1)} / ${minA.toFixed(1)}</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>👥 部員設定</h2>
+        <div style="overflow-x:auto;">
+          <table>
+            <tr><th>名前</th><th>学年</th><th>性別</th><th>操作</th></tr>
+            ${state.members.map(m => `
+              <tr>
+                <td><input type="text" value="${m.name}" onchange="updateMember(${m.id},'name',this.value)"></td>
+                <td><select onchange="updateMember(${m.id},'grade',this.value)"><option value="1" ${m.grade===1?'selected':''}>1年</option><option value="2" ${m.grade===2?'selected':''}>2年</option></select></td>
+                <td><select onchange="updateMember(${m.id},'gender',this.value)"><option value="M" ${m.gender==='M'?'selected':''}>男</option><option value="F" ${m.gender==='F'?'selected':''}>女</option></select></td>
+                <td><button onclick="delMember(${m.id})" class="btn-sm btn-danger">削除</button></td>
+              </tr>
+            `).join('')}
+            <tr>
+              <td><input type="text" id="new_mem_n" placeholder="新規名前"></td>
+              <td><select id="new_mem_gr"><option value="1">1年</option><option value="2" selected>2年</option></select></td>
+              <td><select id="new_mem_ge"><option value="M">男</option><option value="F">女</option></select></td>
+              <td><button onclick="addMember()" class="btn-sm">追加</button></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>⚙️ 基本設定</h2>
+          <div class="flex-row" style="margin-bottom:10px;">
+            <label>宿泊数: <input type="number" min="1" value="${state.config.nights}" onchange="updateConfig('nights',this.value)" class="w-auto"></label>
+            <label>食材/食: <input type="number" step="0.1" value="${state.config.foodWeightPerMeal}" onchange="updateConfig('foodWeightPerMeal',this.value)" class="w-auto">kg</label>
+          </div>
+          <div class="flex-row">
+            <label>男子係数: <input type="number" step="0.1" value="${state.config.weightM}" onchange="updateConfig('weightM',this.value)" class="w-auto"></label>
+            <label>女子係数: <input type="number" step="0.1" value="${state.config.weightF}" onchange="updateConfig('weightF',this.value)" class="w-auto"></label>
+            <label>食事班数: <input type="number" min="1" value="${state.config.mealGroupCount}" onchange="updateConfig('mealGroupCount',this.value)" class="w-auto"></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>🎒 装備設定</h2>
+          <div style="overflow-x:auto; max-height: 250px;">
+            <table>
+              <tr><th>装備名</th><th>重量(kg)</th><th>数</th><th>操作</th></tr>
+              ${state.items.map(i => `
+                <tr>
+                  <td><input type="text" value="${i.name}" onchange="updateItem('${i.id}','name',this.value)"></td>
+                  <td><input type="number" step="0.01" value="${i.weight}" onchange="updateItem('${i.id}','weight',this.value)" style="width:60px;"></td>
+                  <td><input type="number" value="${i.count}" onchange="updateItem('${i.id}','count',this.value)" style="width:50px;"></td>
+                  <td>${i.category==='other' ? `<button onclick="delItem('${i.id}')" class="btn-sm btn-danger">消</button>`:''}</td>
+                </tr>
+              `).join('')}
+              <tr>
+                <td><input type="text" id="new_itm_n" placeholder="追加装備"></td>
+                <td><input type="number" id="new_itm_w" step="0.1" placeholder="重量" style="width:60px;"></td>
+                <td><input type="number" id="new_itm_c" value="1" style="width:50px;"></td>
+                <td><button onclick="addItem()" class="btn-sm">追</button></td>
+              </tr>
+            </table>
+          </div>
+          ${renderInventory()}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      ${renderTentHtml()}
+      ${renderMealHtml()}
+    </div>
+
+    <div class="card">
+      <h2>📦 個人装備分配 (ドラッグ＆ドロップで移動可)</h2>
+      <div class="grid-3">
+        ${state.members.map(m => {
+          let st = getMemStats(m);
+          return `
+          <div class="member-box" data-id="${m.id}" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ${m.id})">
+            <div class="member-info">
+              <span class="${m.gender==='M'?'gender-m':'gender-f'}">${m.name} (${m.grade}年${m.gender==='M'?'男':'女'})</span>
+              <span>${st.rw.toFixed(1)}kg</span>
+            </div>
+            <div class="member-stats">
+              <span>係数: ${st.cf}</span>
+              <span>補正後: <b style="color:var(--primary-dark)">${st.aw.toFixed(1)}kg</b></span>
+            </div>
+            <div>
+              ${m.items.map(it => `
+                <div class="item-card" draggable="true" ondragstart="dragStart(event, ${m.id}, '${it.uid}')" ontouchstart="touchStart(event, ${m.id}, '${it.uid}')" ontouchmove="touchMove(event)" ontouchend="touchEnd(event)">
+                  <span>${it.name}</span>
+                  <span style="color:#666">${getRealWeight(it).toFixed(2)}kg</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('app').innerHTML = html;
+}
+
+function getMemStats(m) {
+  let rw = m.items.reduce((s,it) => s + getRealWeight(it), 0);
+  let cf = m.gender==='M' ? state.config.weightM : state.config.weightF;
+  return { rw, aw: rw/cf, cf };
+}
+
+function renderInventory() {
+  let st = {};
+  state.items.forEach(i => st[i.id] = {t:i.count, u:0, n:i.name});
+  state.members.forEach(m => m.items.forEach(it => { if(it.refId!=='food' && st[it.refId]) st[it.refId].u++; }));
+  let out = [];
+  for(let k in st) {
+    if(st[k].u > 0 || st[k].t > 0) out.push(`<span style="display:inline-block; margin-right:10px; font-size:0.85rem; ${st[k].t < st[k].u ? 'color:red;font-weight:bold;':''}">${st[k].n}: ${st[k].u}/${st[k].t}</span>`);
+  }
+  return `<div style="margin-top:10px; padding:10px; background:#f9f9f9; border-radius:4px; border:1px solid #eee;"><b>在庫状況(使用/総数):</b><br>${out.join('')}</div>`;
+}
+
+function renderTentHtml() {
+  let asg = new Set(); state.tentGroups.forEach(g=>g.members.forEach(id=>asg.add(id)));
+  return `<div class="card">
+    <h2>⛺ テント班</h2>
+    ${state.tentGroups.map(g => {
+      let mList = g.members.map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+      let un = state.members.filter(m => m.gender===g.gender && !asg.has(m.id));
+      return `<div class="group-box">
+        <h3>班${g.id} (${g.gender==='M'?'男子':'女子'} / ${mList.length}人) - ${g.tent?g.tent.name:'なし'}</h3>
+        <ul>${mList.map(m=>`<li>${m.name} <button class="btn-sm" onclick="delTentMem(${g.id},${m.id})">外す</button></li>`).join('')}</ul>
+        <div class="flex-row">
+          <select id="s_t_${g.id}"><option value="">+ メンバー追加</option>${un.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select>
+          <button class="btn-sm" onclick="addTentMem(${g.id}, 's_t_${g.id}')">追加</button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderMealHtml() {
+  let asg = new Set(); state.mealGroups.forEach(g=>g.members.forEach(id=>asg.add(id)));
+  return `<div class="card">
+    <h2>🍳 食事班</h2>
+    ${state.mealGroups.map(g => {
+      let mList = g.members.map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+      let un = state.members.filter(m => !asg.has(m.id));
+      return `<div class="group-box">
+        <h3>班${g.id} (${mList.length}人)</h3>
+        <ul>${mList.map(m=>`<li>${m.name} <button class="btn-sm" onclick="delMealMem(${g.id},${m.id})">外す</button></li>`).join('')}</ul>
+        <div class="flex-row">
+          <select id="s_m_${g.id}"><option value="">+ メンバー追加</option>${un.map(m=>`<option value="${m.id}">${m.name} (${m.gender==='M'?'男':'女'})</option>`).join('')}</select>
+          <button class="btn-sm" onclick="addMealMem(${g.id}, 's_m_${g.id}')">追加</button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// 起動
+window.onload = () => { loadState(); render(); };
+</script>
+</body>
+</html>
